@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"sync"
@@ -93,23 +94,38 @@ func (c *ThrylosLightClient) handleJSONRPC(w http.ResponseWriter, r *http.Reques
 func (c *ThrylosLightClient) forwardRequest(req JSONRPCRequest) (*JSONRPCResponse, error) {
 	reqBody, err := json.Marshal(req)
 	if err != nil {
+		log.Printf("Error marshaling request: %v", err)
 		return nil, err
 	}
 
-	// Try each seed node until successful
 	for _, node := range c.seedNodes {
-		resp, err := c.httpClient.Post(
-			fmt.Sprintf("http://%s", node),
-			"application/json",
-			bytes.NewBuffer(reqBody),
-		)
+		url := fmt.Sprintf("http://%s/", node) // Use root path
+		log.Printf("Attempting to connect to node: %s", url)
+
+		request, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBody))
 		if err != nil {
+			log.Printf("Error creating request for %s: %v", url, err)
 			continue
 		}
-		defer resp.Body.Close()
 
+		// Add required headers
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Origin", "http://localhost:8545") // Set appropriate origin
+
+		resp, err := c.httpClient.Do(request)
+		if err != nil {
+			log.Printf("Error connecting to %s: %v", url, err)
+			continue
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		log.Printf("Raw response from %s: Status=%d, Body=%s", url, resp.StatusCode, string(body))
+		resp.Body.Close()
+
+		// Create a new reader for the body since we've read it already
 		var response JSONRPCResponse
-		if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		if err := json.NewDecoder(bytes.NewReader(body)).Decode(&response); err != nil {
+			log.Printf("Error decoding response from %s: %v\nResponse body: %s", url, err, string(body))
 			continue
 		}
 

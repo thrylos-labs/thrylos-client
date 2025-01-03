@@ -136,7 +136,6 @@ func (c *ThrylosLightClient) forwardRequest(req JSONRPCRequest) (*JSONRPCRespons
 }
 
 // discoverPeers periodically updates the list of peers
-// discoverPeers periodically updates the list of peers
 func (c *ThrylosLightClient) discoverPeers() {
 	ticker := time.NewTicker(time.Minute * 5)
 	for range ticker.C {
